@@ -17,7 +17,7 @@ conn = mysql.connector.connect(**db_config)
 cursor = conn.cursor()
 
 # Repository URL
-repo_url = 'https://github.com/RojhatAlg/00-welcome-to-cloud9'
+repo_url = 'https://github.com/amazon-ion/ion-java'
 
 for commit in Repository(repo_url).traverse_commits():
     commit_hash = commit.hash
