@@ -2,8 +2,8 @@ import os
 
 from pydriller import Repository
 
-repo_url = 'https://github.com/RojhatAlg/00-welcome-to-cloud9'  # Replace with repo URL
-commit_hash = 'c5f92472ecc412ec704de5ffcc4a06b58976875a'  # Replace with the specific commit hash you want to analyze
+repo_url = 'https://github.com/amazon-ion/ion-java.git'  # Replace with repo URL
+commit_hash = '2ae8b74d3534db1d6bca7eaaeaefb5ed980bd767'  # Replace with the specific commit hash you want to analyze
 
 # Path to the temp_repo directory
 temp_repo_path = 'temp_repo'
