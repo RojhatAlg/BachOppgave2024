@@ -2,13 +2,13 @@ import os
 import json
 import re
 import psycopg2
-import requests
-from urllib.parse import urlparse
-from pydriller_test import Repository, Git
+from pydriller import Repository
+
+
+
 
 
 def find_github_commit_references(text):
-    github_commit_references = []
     commit_regex = re.compile(r'https://github\.com/[^/]+/[^/]+/commit/[a-fA-F\d]+')
     # Find all GitHub commit URLs in the text using REGEX
     github_commit_references = re.findall(commit_regex, text)
@@ -21,28 +21,20 @@ def extract_repo_url(commit_url):
     return repo_url
 
 
-def fetch_diff_of_commit(repo_url, commit_url):
-    # Extract the repository name and commit hash from the commit URL
-    repo_name = commit_url.split('/')[3] + '/' + commit_url.split('/')[4]
-    commit_hash = commit_url.split('/')[-1]
+def fetch_diff_of_commit(repo_url, commit_hash):
+    repo_path = os.path.join("repositories", repo_url.split('/')[-2])  # Create directory for the repository
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path)
 
-    # Construct the API URL to get the commit diff
-    api_url = f"https://api.github.com/repos/{repo_name}/commits/{commit_hash}"
+    for commit in Repository(repo_url).traverse_commits():
+        if commit.hash == commit_hash:
+            diffs = []
+            for modification in commit.modifications:
+                diffs.append(
+                    {'src_code_before': modification.source_code_before, 'src_code_after': modification.source_code})
+            return diffs
 
-    # Send GET request to GitHub API
-    response = requests.get(api_url)
-    response_json = response.json()
-
-    # Extract and return the diff content from the API response
-    if 'files' in response_json:
-        diffs = []
-        for file in response_json['files']:
-            src_code_before = file['patch']
-            src_code_after = ''  # Since we're splitting into two rows, initialize this as empty
-            diffs.append({'src_code_before': src_code_before, 'src_code_after': src_code_after})
-        return diffs
-    else:
-        return []
+    return []
 
 
 def link_exists_in_database(cursor, link):
@@ -78,12 +70,10 @@ def search_and_store_links(root_folder):
                                 if github_commit_references:
                                     print(f"Found in {file_path}: {url}")
 
-                                    # Extract repository name from URL
-                                    repo_url = extract_repo_url(url)
-
-                                    # Fetch diff of the commit
                                     for commit_url in github_commit_references:
-                                        diffs = fetch_diff_of_commit(repo_url, commit_url)
+                                        commit_hash = commit_url.split('/')[-1]
+                                        repo_url = extract_repo_url(commit_url)
+                                        diffs = fetch_diff_of_commit(repo_url, commit_hash)
 
                                         for diff in diffs:
                                             # Check if link already exists in database
@@ -91,7 +81,8 @@ def search_and_store_links(root_folder):
                                                 # Insert link, repo name, and CVE file path into database
                                                 cursor.execute(
                                                     'INSERT INTO urls (url, repo_name, cve_file_path, src_code_before, src_code_after) VALUES (%s, %s, %s, %s, %s)',
-                                                    (url, repo_url, file_path, diff['src_code_before'], diff['src_code_after']))
+                                                    (url, repo_url, file_path, diff['src_code_before'],
+                                                     diff['src_code_after']))
                                                 conn.commit()
 
                                                 print("New row added to database:")
@@ -101,8 +92,11 @@ def search_and_store_links(root_folder):
                                                 print("Src Code Before:", diff['src_code_before'])
                                                 print("Src Code After:", diff['src_code_after'])
 
-                    except json.JSONDecodeError:
-                        print(f"Error decoding JSON in {file_path}")
+                    except json.JSONDecodeError as e:
+                        print(f"Error decoding JSON in {file_path}: {e}")
+
+                    except Exception as ex:
+                        print(f"An error occurred: {ex}")
 
     cursor.close()
     conn.close()

@@ -18,4 +18,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app/
 
 # Command to run the Python application
-CMD ["python", "open-cve-folders.py"]
+CMD ["python", "github_commits_detailed.py"]
