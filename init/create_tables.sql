@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS urls (
     id SERIAL PRIMARY KEY,
-    url VARCHAR(2048) NOT NULL,
-    repo_name VARCHAR(2048) NOT NULL,
-    cve_file_path VARCHAR(2048) NOT NULL,
-    src_code_before VARCHAR(32768) NOT NULL,
-    src_code_after VARCHAR(32768) NOT NULL
+    url TEXT NOT NULL,
+    repo_name TEXT NOT NULL,
+    cve_file_path TEXT NOT NULL,
+    src_code_before TEXT NOT NULL,
+    src_code_after TEXT NOT NULL
 );

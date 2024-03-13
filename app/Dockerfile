@@ -14,8 +14,11 @@ COPY requirements.txt /app/
 # Install any dependencies specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Add a dummy instruction to invalidate cache
+RUN echo "dummy"
+
 # Copy the entire project directory into the container at /app
 COPY . /app/
 
 # Command to run the Python application
-CMD ["python", "github_commits_detailed.py"]
+CMD ["python", "github-commits-detailed.py"]
