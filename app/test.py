@@ -4,61 +4,41 @@ import re
 import psycopg2
 from pydriller import Repository
 
+
 def find_commit_references(text):
-    # Regular expressions for different repository hosts
-    github_commit_regex = re.compile(r'https://github\.com/[^/]+/[^/]+/commit/[a-fA-F\d]+')
-    gitlab_commit_regex = re.compile(r'https?://gitlab\.com/[^/]+/[^/]+/-/commit/[a-fA-F\d]+')
-    bitbucket_commit_regex = re.compile(r'https?://bitbucket\.org/[^/]+/[^/]+/commits/[a-fA-F\d]+')
-    git0pointer_commit_regex = re.compile(r'http://git\.0pointer\.de/\?p=([^;&]+)\.git.*commit.*h=([a-fA-F\d]+)')
+    # Regular expression to find commit URLs for various repositories, Added support for commmit/commits
+    commit_regex = re.compile(r'https?://[^/\s]+/[^\s]+/commits?/[a-fA-F\d]+')
+    commit_references = commit_regex.findall(text)
 
-    # Find all commit URLs in the text using REGEX
-    github_commit_references = re.findall(github_commit_regex, text)
-    gitlab_commit_references = re.findall(gitlab_commit_regex, text)
-    bitbucket_commit_references = re.findall(bitbucket_commit_regex, text)
-    git0pointer_commit_references = re.findall(git0pointer_commit_regex, text)
+    return commit_references
 
-    # Flatten the list of tuples into a list of strings
-    git0pointer_commit_references = [f'http://git.0pointer.de/?p={repo}.git;a=commit;h={commit_hash}' for
-                                     repo, commit_hash in git0pointer_commit_references]
-
-    # Print the matched URLs
-    print("Found Git 0pointer URLs:", git0pointer_commit_references)
-    print("Found Git 0pointer URLs:", github_commit_references)
-    print(("Found Git URL: "), gitlab_commit_references)
-    print("Found Bitbucket URLs:", bitbucket_commit_references)
-
-    return github_commit_references + git0pointer_commit_references + gitlab_commit_references + bitbucket_commit_references
 
 
 def extract_repo_url(commit_url):
+    print("Processing commit URL:", commit_url)  # Print the full commit URL
 
-    #GitHub URLs: Remove '/commit' to get repo URL only.
-
-    if 'github.com' in commit_url:
+    # Check if the URL contains 'github.com'
+    if 'githu1b.com' in commit_url:
+        repo_url = commit_url.split('/commit')[0]
+    # Check if the URL contains 'gitlab.com'
+    elif 'gitla1b.com' in commit_url:
+        parts = commit_url.split('/')
+        if len(parts) >= 5:  # Ensure the URL has at least 5 parts, for testing purposes only atm
+            repo_url = '/'.join(parts[:5])
+        else:
+            print("Invalid commit URL:", commit_url)
+            return None
+    # Check if the URL contains 'bitbucket.org'
+    elif 'bitbucket.org' in commit_url:
         repo_url = commit_url.split('/commit')[0]
 
-    # Bitbucket URLs: Extract owner and repo name. same for Gitlab aswell
+    else:
+        print("Unsupported repository URL:", commit_url)
+        return None
 
-    elif 'gitlab.com' in commit_url:
-        # Extract the repo owner and repo name from the URL
-        owner, repo_name = commit_url.split('/')[3:5]
-
-        # Construct the full repository URL
-        repo_url = f'https://gitlab.com/{owner}/{repo_name}'
-
-
-    elif 'bitbucket.org' in commit_url:
-        # Extract the repo owner and repo name from the URL
-        owner, repo_name = commit_url.split('/')[3:5]
-
-        # Construct the full repository URL
-        repo_url = f'https://bitbucket.org/{owner}/{repo_name}'
-
-    elif 'git.0pointer.de' in commit_url:
-        repo_url = commit_url.split('?p=')[1].split(';')[0]
-        repo_url = 'http://git.0pointer.de/' + repo_url
-
+    print("Extracted repository URL:", repo_url)
     return repo_url
+
 
 def fetch_diff_of_commit(repo_url, commit_hash):
     print(f"Fetching commit diffs for repo: {repo_url}, commit hash: {commit_hash}")
@@ -68,14 +48,25 @@ def fetch_diff_of_commit(repo_url, commit_hash):
         for commit in repo.traverse_commits():
             if commit.hash == commit_hash:
                 for modified_file in commit.modified_files:
-                    diffs.append(
-                        {'file_path': modified_file.new_path,
-                         'src_code_before': modified_file.source_code_before,
-                         'src_code_after': modified_file.source_code})
+                    diffs.append({
+                        'file_path': modified_file.new_path,
+                        'src_code_before': modified_file.source_code_before,
+                        'src_code_after': modified_file.source_code
+                    })
         return diffs
+    except FileNotFoundError as e:
+        print(f"Repository not found: {repo_url}")
     except Exception as e:
-        print(f"Error fetching commit diffs: {e}")
-        return []
+        # Check if the exception message indicates a repository not found error
+        if "repository not found" in str(e).lower():
+            print(f"Repository not found: {repo_url}")
+        elif "authorization" in str(e).lower():
+            print(f"Authorization error accessing repository: {repo_url}")
+        else:
+            print(f"Error fetching commit diffs: {e}")
+    return []
+
+
 
 def link_exists_in_database(cursor, link):
     cursor.execute('SELECT COUNT(*) FROM urls WHERE url = %s', (link,))
@@ -83,12 +74,8 @@ def link_exists_in_database(cursor, link):
     return count > 0
 
 def search_and_store_links():
-    # Get the directory of the current Python script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Define the root folder
-    base_folder = os.path.join(script_dir, '..', 'data', 'cves')
+    base_folder = '../data/cves'
 
-    # Connect to PostgreSQL database
     try:
         conn = psycopg2.connect(
             user='root',
@@ -100,10 +87,10 @@ def search_and_store_links():
         for root, dirs, files in os.walk(base_folder):
             for file in files:
                 if file.endswith('.json') and file.startswith('CVE-'):
-                    file_path = os.path.relpath(os.path.join(root, file), base_folder)  # Get the relative file path
+                    file_path = os.path.join(root, file)
                     print(f"Processing file: {file_path}")
 
-                    with open(os.path.join(root, file), 'r', encoding='utf-8') as json_file:
+                    with open(file_path, 'r', encoding='utf-8') as json_file:
                         try:
                             cve_data = json.load(json_file)
                             references = cve_data.get('containers', {}).get('cna', {}).get('references', [])
@@ -142,7 +129,6 @@ def search_and_store_links():
                                                         print("Src Code After:", diff['src_code_after'])
                                                     except psycopg2.Error as err:
                                                         conn.rollback()  # Rollback the transaction
-                                                        print
                                                         print("PostgreSQL Error:", err)
                                                     except Exception as ex:
                                                         conn.rollback()  # Rollback the transaction
